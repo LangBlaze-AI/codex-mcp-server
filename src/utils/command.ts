@@ -29,12 +29,14 @@ export type ProgressCallback = (message: string) => void;
 export interface StreamingCommandOptions {
   onProgress?: ProgressCallback;
   envOverride?: ProcessEnv;
+  softTimeoutMs?: number;
 }
 
 export async function executeCommand(
   file: string,
   args: string[] = [],
-  envOverride?: ProcessEnv
+  envOverride?: ProcessEnv,
+  softTimeoutMs?: number
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     // Escape args for Windows shell
@@ -52,6 +54,23 @@ export async function executeCommand(
     let stderr = '';
     let stdoutTruncated = false;
     let stderrTruncated = false;
+
+    let softTimeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+
+    if (softTimeoutMs) {
+      softTimeoutTimer = setTimeout(() => {
+        timedOut = true;
+        console.error(chalk.yellow(`[soft-timeout] Sending SIGTERM after ${softTimeoutMs}ms`));
+        child.kill('SIGTERM');
+        setTimeout(() => {
+          if (!child.killed) {
+            console.error(chalk.yellow('[soft-timeout] Sending SIGKILL (5s backstop)'));
+            child.kill('SIGKILL');
+          }
+        }, 5000);
+      }, softTimeoutMs);
+    }
 
     child.stdout.on('data', (data: Buffer) => {
       if (!stdoutTruncated) {
@@ -80,6 +99,17 @@ export async function executeCommand(
     });
 
     child.on('close', (code) => {
+      if (softTimeoutTimer) clearTimeout(softTimeoutTimer);
+
+      if (timedOut) {
+        const partialOutput = stdout || stderr || '';
+        resolve({
+          stdout: `[Soft timeout - partial output]\n${partialOutput}`,
+          stderr,
+        });
+        return;
+      }
+
       if (stderr) {
         console.error(chalk.yellow('Command stderr:'), stderr);
       }
@@ -154,6 +184,23 @@ export async function executeCommandStreaming(
     let lastProgressTime = 0;
     const PROGRESS_DEBOUNCE_MS = 100; // Debounce progress updates
 
+    let softTimeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+
+    if (options.softTimeoutMs) {
+      softTimeoutTimer = setTimeout(() => {
+        timedOut = true;
+        console.error(chalk.yellow(`[soft-timeout] Sending SIGTERM after ${options.softTimeoutMs}ms`));
+        child.kill('SIGTERM');
+        setTimeout(() => {
+          if (!child.killed) {
+            console.error(chalk.yellow('[soft-timeout] Sending SIGKILL (5s backstop)'));
+            child.kill('SIGKILL');
+          }
+        }, 5000);
+      }, options.softTimeoutMs);
+    }
+
     const sendProgress = (message: string) => {
       if (!options.onProgress) return;
 
@@ -195,6 +242,17 @@ export async function executeCommandStreaming(
     });
 
     child.on('close', (code) => {
+      if (softTimeoutTimer) clearTimeout(softTimeoutTimer);
+
+      if (timedOut) {
+        const partialOutput = stdout || stderr || '';
+        resolve({
+          stdout: `[Soft timeout - partial output]\n${partialOutput}`,
+          stderr,
+        });
+        return;
+      }
+
       // Send final progress if there's any remaining output
       if (options.onProgress && (stdout || stderr)) {
         const finalOutput = stdout || stderr;

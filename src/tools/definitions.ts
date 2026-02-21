@@ -52,6 +52,11 @@ export const toolDefinitions: ToolDefinition[] = [
           description:
             'Static MCP callback URI to pass to Codex via environment (if provided)',
         },
+        softTimeoutMs: {
+          type: 'number',
+          description:
+            'Soft timeout in milliseconds. If set, prepends a time budget hint to the prompt and sends SIGTERM at this deadline, SIGKILL 5s later. Resolves with partial output (not an error). Example: 1800000 for 30 minutes.',
+        },
       },
       required: ['prompt'],
     },
