@@ -161,6 +161,6 @@ describe('Error Handling Scenarios', () => {
       'gpt-5.3-codex',
       '--skip-git-repo-check',
       longPrompt,
-    ]);
+    ], undefined, undefined);
   });
 });

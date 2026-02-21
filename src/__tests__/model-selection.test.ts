@@ -51,7 +51,7 @@ describe('Model Selection and Reasoning Effort', () => {
       'gpt-4',
       '--skip-git-repo-check',
       'Test prompt',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should pass reasoning effort to codex CLI', async () => {
@@ -68,7 +68,7 @@ describe('Model Selection and Reasoning Effort', () => {
       'model_reasoning_effort="high"',
       '--skip-git-repo-check',
       'Complex analysis',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should combine model and reasoning effort', async () => {
@@ -86,7 +86,7 @@ describe('Model Selection and Reasoning Effort', () => {
       'model_reasoning_effort="medium"',
       '--skip-git-repo-check',
       'Advanced task',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should include model info in response metadata', async () => {
@@ -138,7 +138,7 @@ describe('Model Selection and Reasoning Effort', () => {
       'model_reasoning_effort="minimal"',
       '--skip-git-repo-check',
       'Quick task',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should pass none reasoning effort to CLI', async () => {
@@ -155,7 +155,7 @@ describe('Model Selection and Reasoning Effort', () => {
       'model_reasoning_effort="none"',
       '--skip-git-repo-check',
       'Simple task',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should pass xhigh reasoning effort to CLI', async () => {
@@ -172,6 +172,6 @@ describe('Model Selection and Reasoning Effort', () => {
       'model_reasoning_effort="xhigh"',
       '--skip-git-repo-check',
       'Complex task',
-    ]);
+    ], undefined, undefined);
   });
 });

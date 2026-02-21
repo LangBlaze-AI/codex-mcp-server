@@ -49,7 +49,7 @@ describe('Default Model Configuration', () => {
       'gpt-5.3-codex',
       '--skip-git-repo-check',
       'Test prompt',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should include default model in response metadata', async () => {
@@ -72,7 +72,7 @@ describe('Default Model Configuration', () => {
       'gpt-4',
       '--skip-git-repo-check',
       'Test prompt',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should use default model with sessions', async () => {
@@ -89,7 +89,7 @@ describe('Default Model Configuration', () => {
       'gpt-5.3-codex',
       '--skip-git-repo-check',
       'Test prompt',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should use default model with resume functionality', async () => {
@@ -110,7 +110,7 @@ describe('Default Model Configuration', () => {
       'resume',
       'existing-conv-id',
       'Resume with default model',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should combine default model with reasoning effort', async () => {
@@ -127,7 +127,7 @@ describe('Default Model Configuration', () => {
       'model_reasoning_effort="high"',
       '--skip-git-repo-check',
       'Complex task',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should use CODEX_DEFAULT_MODEL environment variable when set', async () => {
@@ -143,7 +143,7 @@ describe('Default Model Configuration', () => {
         'gpt-4',
         '--skip-git-repo-check',
         'Test with env var',
-      ]);
+      ], undefined, undefined);
     } finally {
       if (originalEnv) {
         process.env.CODEX_DEFAULT_MODEL = originalEnv;
@@ -169,7 +169,7 @@ describe('Default Model Configuration', () => {
         'gpt-3.5-turbo',
         '--skip-git-repo-check',
         'Test priority',
-      ]);
+      ], undefined, undefined);
     } finally {
       if (originalEnv) {
         process.env.CODEX_DEFAULT_MODEL = originalEnv;

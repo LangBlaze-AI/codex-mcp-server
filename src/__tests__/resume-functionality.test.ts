@@ -54,7 +54,7 @@ describe('Codex Resume Functionality', () => {
       'gpt-5.3-codex',
       '--skip-git-repo-check',
       'First message',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should extract and store session ID', async () => {
@@ -130,7 +130,8 @@ describe('Codex Resume Functionality', () => {
     expect(mockedExecuteCommand).toHaveBeenCalledWith(
       'codex',
       expect.any(Array),
-      { CODEX_MCP_CALLBACK_URI: 'http://localhost:1234/callback' }
+      { CODEX_MCP_CALLBACK_URI: 'http://localhost:1234/callback' },
+      undefined
     );
   });
 
@@ -160,7 +161,7 @@ describe('Codex Resume Functionality', () => {
       'resume',
       'existing-codex-session-id',
       'Continue the task',
-    ]);
+    ], undefined, undefined);
   });
 
   test('should reset session ID when session is reset', async () => {
@@ -185,7 +186,7 @@ describe('Codex Resume Functionality', () => {
       'gpt-5.3-codex',
       '--skip-git-repo-check',
       'Reset and start new',
-    ]);
+    ], undefined, undefined);
     expect(sessionStorage.getCodexConversationId(sessionId)).toBe(
       'new-session-id'
     );
