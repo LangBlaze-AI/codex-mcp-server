@@ -51,10 +51,17 @@ export class CodexToolHandler {
         fullAuto,
         workingDirectory,
         callbackUri,
+        softTimeoutMs,
       }: CodexToolArgs = CodexToolSchema.parse(args);
 
       let activeSessionId = sessionId;
       let enhancedPrompt = prompt;
+
+      // Prepend time budget hint when softTimeoutMs is set
+      if (softTimeoutMs) {
+        const minutes = Math.round(softTimeoutMs / 60000);
+        enhancedPrompt = `[Time budget: ${minutes}m. Summarize what you have if running long — complete answer over exhaustive research.]\n\n${enhancedPrompt}`;
+      }
 
       // Only work with sessions if explicitly requested
       let useResume = false;
@@ -158,10 +165,9 @@ export class CodexToolHandler {
               context.sendProgress(message);
             },
             envOverride,
+            softTimeoutMs,
           })
-        : envOverride
-          ? await executeCommand('codex', cmdArgs, envOverride)
-          : await executeCommand('codex', cmdArgs);
+        : await executeCommand('codex', cmdArgs, envOverride, softTimeoutMs);
 
       // Codex CLI may output to stderr, so check both
       const response = result.stdout || result.stderr || 'No output from Codex';
