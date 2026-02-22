@@ -21,6 +21,10 @@ import {
 import { ToolExecutionError, ValidationError } from '../errors.js';
 import { executeCommand, executeCommandStreaming } from '../utils/command.js';
 import { ZodError } from 'zod';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../../package.json');
 
 // Default no-op context for handlers that don't need progress
 const defaultContext: ToolHandlerContext = {
@@ -482,6 +486,25 @@ export class ReviewToolHandler {
   }
 }
 
+export class IdentityToolHandler {
+  async execute(
+    _args: unknown,
+    _context: ToolHandlerContext = defaultContext
+  ): Promise<ToolResult> {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          server: 'codex-mcp-server',
+          version: pkg.version,
+          mcp_server_name: 'codex-cli',
+          llm: process.env[CODEX_DEFAULT_MODEL_ENV_VAR] ?? DEFAULT_CODEX_MODEL,
+        }, null, 2),
+      }],
+    };
+  }
+}
+
 // Tool handler registry
 const sessionStorage = new InMemorySessionStorage();
 
@@ -491,4 +514,5 @@ export const toolHandlers = {
   [TOOLS.PING]: new PingToolHandler(),
   [TOOLS.HELP]: new HelpToolHandler(),
   [TOOLS.LIST_SESSIONS]: new ListSessionsToolHandler(sessionStorage),
+  [TOOLS.IDENTITY]: new IdentityToolHandler(),
 } as const;
