@@ -4,6 +4,7 @@ import {
   TOOLS,
   DEFAULT_CODEX_MODEL,
   CODEX_DEFAULT_MODEL_ENV_VAR,
+  AVAILABLE_CODEX_MODELS,
   PingToolSchema,
   HelpToolSchema,
   ListSessionsToolSchema,
@@ -24,6 +25,14 @@ function loadPackageVersion(): string {
   } catch {
     return '0.0.0';
   }
+}
+
+function detectInstallMethod(): string {
+  const argv1 = process.argv[1] ?? '';
+  if (argv1.includes('node_modules')) return 'npm';
+  if (argv1.includes('homebrew') || argv1.includes('/opt/homebrew')) return 'brew';
+  if (process.env['npm_config_prefix']) return 'npm';
+  return 'unknown';
 }
 
 const pkgVersion = loadPackageVersion();
@@ -148,10 +157,11 @@ export const identityTool: UnifiedTool = {
   category: 'simple',
   execute: async (_args: ToolArguments): Promise<string> => {
     return JSON.stringify({
-      server: 'codex-mcp-server',
-      version: pkgVersion,
-      mcp_server_name: 'codex-cli',
-      llm: process.env[CODEX_DEFAULT_MODEL_ENV_VAR] ?? DEFAULT_CODEX_MODEL,
+      name: 'codex-mcp-server',
+      version: loadPackageVersion(),
+      model: process.env[CODEX_DEFAULT_MODEL_ENV_VAR] ?? DEFAULT_CODEX_MODEL,
+      available_models: AVAILABLE_CODEX_MODELS,
+      install_method: detectInstallMethod(),
     }, null, 2);
   },
 };
