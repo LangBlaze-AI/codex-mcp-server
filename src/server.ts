@@ -8,14 +8,11 @@ import chalk from 'chalk';
 
 import {
   type ServerConfig,
-  type ToolName,
   type ToolHandlerContext,
   type ProgressToken,
-  TOOLS,
 } from './types.js';
 import { handleError } from './errors.js';
-import { toolDefinitions } from './tools/definitions.js';
-import { toolHandlers } from './tools/handlers.js';
+import { getToolDefinitions, executeTool, toolExists, type ToolArguments } from './tools/index.js';
 
 export class CodexMcpServer {
   private readonly server: Server;
@@ -41,7 +38,7 @@ export class CodexMcpServer {
   private setupHandlers(): void {
     // List tools handler
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return { tools: toolDefinitions };
+      return { tools: getToolDefinitions() };
     });
 
     // Call tool handler
@@ -79,15 +76,20 @@ export class CodexMcpServer {
       };
 
       try {
-        if (!this.isValidToolName(name)) {
+        if (!toolExists(name)) {
           throw new Error(`Unknown tool: ${name}`);
         }
 
-        const handler = toolHandlers[name];
+        const toolArgs = ((args as ToolArguments) || {}) as ToolArguments;
         const context = createProgressContext();
-        const result = await handler.execute(args, context);
+        const resultText = await executeTool(name, toolArgs, (chunk) => {
+          context.sendProgress(chunk);
+        });
         context.done?.();
-        return result;
+        return {
+          content: [{ type: 'text' as const, text: resultText }],
+          isError: false,
+        };
       } catch (error) {
         return {
           content: [
@@ -100,10 +102,6 @@ export class CodexMcpServer {
         };
       }
     });
-  }
-
-  private isValidToolName(name: string): name is ToolName {
-    return Object.values(TOOLS).includes(name as ToolName);
   }
 
   async start(): Promise<void> {

@@ -7,6 +7,7 @@ export const TOOLS = {
   PING: 'ping',
   HELP: 'help',
   LIST_SESSIONS: 'listSessions',
+  IDENTITY: 'identity',
 } as const;
 
 export type ToolName = typeof TOOLS[keyof typeof TOOLS];

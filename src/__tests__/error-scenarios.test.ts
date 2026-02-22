@@ -1,4 +1,6 @@
-import { CodexToolHandler, ReviewToolHandler } from '../tools/handlers.js';
+import { codexTool } from '../tools/codex.tool.js';
+import { reviewTool } from '../tools/review.tool.js';
+import { sessionStorage } from '../session/index.js';
 import { InMemorySessionStorage } from '../session/storage.js';
 import { executeCommand } from '../utils/command.js';
 import { ToolExecutionError, ValidationError } from '../errors.js';
@@ -8,17 +10,22 @@ jest.mock('../utils/command.js', () => ({
   executeCommand: jest.fn(),
 }));
 
+// Mock the session singleton
+jest.mock('../session/index.js', () => ({
+  sessionStorage: new (require('../session/storage.js').InMemorySessionStorage)(),
+}));
+
 const mockedExecuteCommand = executeCommand as jest.MockedFunction<
   typeof executeCommand
 >;
 
 describe('Error Handling Scenarios', () => {
-  let handler: CodexToolHandler;
-  let sessionStorage: InMemorySessionStorage;
+  let testSessionStorage: InMemorySessionStorage;
 
   beforeEach(() => {
-    sessionStorage = new InMemorySessionStorage();
-    handler = new CodexToolHandler(sessionStorage);
+    testSessionStorage = (sessionStorage as unknown) as InMemorySessionStorage;
+    const sessions = testSessionStorage.listSessions();
+    sessions.forEach(s => testSessionStorage.deleteSession(s.id));
     mockedExecuteCommand.mockClear();
   });
 
@@ -27,7 +34,7 @@ describe('Error Handling Scenarios', () => {
       new Error('Authentication failed: Please run `codex login`')
     );
 
-    await expect(handler.execute({ prompt: 'Test prompt' })).rejects.toThrow(
+    await expect(codexTool.execute({ prompt: 'Test prompt' })).rejects.toThrow(
       ToolExecutionError
     );
   });
@@ -37,7 +44,7 @@ describe('Error Handling Scenarios', () => {
       new Error('command not found: codex')
     );
 
-    await expect(handler.execute({ prompt: 'Test prompt' })).rejects.toThrow(
+    await expect(codexTool.execute({ prompt: 'Test prompt' })).rejects.toThrow(
       ToolExecutionError
     );
   });
@@ -48,7 +55,7 @@ describe('Error Handling Scenarios', () => {
     );
 
     await expect(
-      handler.execute({
+      codexTool.execute({
         prompt: 'Test prompt',
         model: 'invalid-model',
       })
@@ -61,7 +68,7 @@ describe('Error Handling Scenarios', () => {
     );
 
     await expect(
-      handler.execute({ prompt: 'Complex analysis task' })
+      codexTool.execute({ prompt: 'Complex analysis task' })
     ).rejects.toThrow(ToolExecutionError);
   });
 
@@ -70,28 +77,25 @@ describe('Error Handling Scenarios', () => {
       new Error('Network error: Unable to reach OpenAI API')
     );
 
-    await expect(handler.execute({ prompt: 'Test prompt' })).rejects.toThrow(
+    await expect(codexTool.execute({ prompt: 'Test prompt' })).rejects.toThrow(
       ToolExecutionError
     );
   });
 
   test('should handle invalid session IDs gracefully', async () => {
-    // Non-existent session ID should not crash
     mockedExecuteCommand.mockResolvedValue({ stdout: 'Response', stderr: '' });
 
-    const result = await handler.execute({
+    const result = await codexTool.execute({
       prompt: 'Test prompt',
       sessionId: 'non-existent-session-id',
     });
 
-    expect(result.content[0].text).toBe('Response');
+    expect(result).toBe('Response');
   });
 
   test('should reject review prompt with uncommitted', async () => {
-    const reviewHandler = new ReviewToolHandler();
-
     await expect(
-      reviewHandler.execute({
+      reviewTool.execute({
         prompt: 'Review instructions',
         uncommitted: true,
       })
@@ -102,7 +106,7 @@ describe('Error Handling Scenarios', () => {
 
   test('should reject invalid sessionId values', async () => {
     await expect(
-      handler.execute({
+      codexTool.execute({
         prompt: 'Test prompt',
         sessionId: 'bad id',
       })
@@ -112,35 +116,33 @@ describe('Error Handling Scenarios', () => {
   });
 
   test('should handle corrupted session data', async () => {
-    const sessionId = sessionStorage.createSession();
+    const sessionId = testSessionStorage.createSession();
 
-    // Manually corrupt session data
-    const session = sessionStorage.getSession(sessionId);
+    const session = testSessionStorage.getSession(sessionId);
     if (session) {
-      (session.turns as unknown) = null; // Corrupt the turns array
+      (session.turns as unknown) = null;
     }
 
     mockedExecuteCommand.mockResolvedValue({ stdout: 'Response', stderr: '' });
 
-    // Should not crash, should handle gracefully
-    const result = await handler.execute({
+    const result = await codexTool.execute({
       prompt: 'Test prompt',
       sessionId,
     });
 
-    expect(result.content[0].text).toBe('Response');
+    expect(result).toBe('Response');
   });
 
   test('should handle malformed resume conversation IDs', async () => {
-    const sessionId = sessionStorage.createSession();
-    sessionStorage.setCodexConversationId(sessionId, 'invalid-conv-id-format');
+    const sessionId = testSessionStorage.createSession();
+    testSessionStorage.setCodexConversationId(sessionId, 'invalid-conv-id-format');
 
     mockedExecuteCommand.mockRejectedValue(
       new Error('Invalid conversation ID format')
     );
 
     await expect(
-      handler.execute({
+      codexTool.execute({
         prompt: 'Resume test',
         sessionId,
       })
@@ -148,13 +150,13 @@ describe('Error Handling Scenarios', () => {
   });
 
   test('should handle very long prompts', async () => {
-    const longPrompt = 'A'.repeat(100000); // 100k character prompt
+    const longPrompt = 'A'.repeat(100000);
 
     mockedExecuteCommand.mockResolvedValue({ stdout: 'Response', stderr: '' });
 
-    const result = await handler.execute({ prompt: longPrompt });
+    const result = await codexTool.execute({ prompt: longPrompt });
 
-    expect(result.content[0].text).toBe('Response');
+    expect(result).toBe('Response');
     expect(mockedExecuteCommand).toHaveBeenCalledWith('codex', [
       'exec',
       '--model',

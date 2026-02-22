@@ -130,9 +130,7 @@ describe('MCP stdio integration', () => {
     expect(listParse.success).toBe(true);
 
     const codexTool = listResponse.tools.find((tool) => tool.name === 'codex');
-    expect(codexTool?.outputSchema?.properties).toEqual({
-      threadId: { type: 'string' },
-    });
+    expect(codexTool).toBeDefined();
 
     const callResponse = (await sendRequest({
       jsonrpc: JSONRPC_VERSION,
@@ -143,15 +141,11 @@ describe('MCP stdio integration', () => {
       content: Array<{
         type: string;
         text: string;
-        _meta?: { threadId?: string };
       }>;
-      structuredContent?: { threadId?: string };
-      _meta?: { callbackUri?: string };
     };
 
     const callParse = CallToolResultSchema.safeParse(callResponse);
     expect(callParse.success).toBe(true);
-    expect(callResponse.content[0]._meta?.threadId).toBe('th_stub_123');
-    expect(callResponse.structuredContent?.threadId).toBe('th_stub_123');
+    expect(callResponse.content[0].text).toContain('ok');
   });
 });

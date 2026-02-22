@@ -1,4 +1,5 @@
-import { CodexToolHandler } from '../tools/handlers.js';
+import { codexTool } from '../tools/codex.tool.js';
+import { sessionStorage } from '../session/index.js';
 import { InMemorySessionStorage } from '../session/storage.js';
 import { executeCommand } from '../utils/command.js';
 
@@ -7,43 +8,34 @@ jest.mock('../utils/command.js', () => ({
   executeCommand: jest.fn(),
 }));
 
+// Mock the session singleton
+jest.mock('../session/index.js', () => ({
+  sessionStorage: new (require('../session/storage.js').InMemorySessionStorage)(),
+}));
+
 const mockedExecuteCommand = executeCommand as jest.MockedFunction<
   typeof executeCommand
 >;
 
 describe('Codex Resume Functionality', () => {
-  let handler: CodexToolHandler;
-  let sessionStorage: InMemorySessionStorage;
-  let originalStructuredContent: string | undefined;
-
-  beforeAll(() => {
-    originalStructuredContent = process.env.STRUCTURED_CONTENT_ENABLED;
-  });
-
-  afterAll(() => {
-    if (originalStructuredContent) {
-      process.env.STRUCTURED_CONTENT_ENABLED = originalStructuredContent;
-    } else {
-      delete process.env.STRUCTURED_CONTENT_ENABLED;
-    }
-  });
+  let testSessionStorage: InMemorySessionStorage;
 
   beforeEach(() => {
-    sessionStorage = new InMemorySessionStorage();
-    handler = new CodexToolHandler(sessionStorage);
+    testSessionStorage = (sessionStorage as unknown) as InMemorySessionStorage;
+    const sessions = testSessionStorage.listSessions();
+    sessions.forEach(s => testSessionStorage.deleteSession(s.id));
     mockedExecuteCommand.mockClear();
-    process.env.STRUCTURED_CONTENT_ENABLED = '1';
     delete process.env.CODEX_MCP_CALLBACK_URI;
   });
 
   test('should use exec for new session without codex session ID', async () => {
-    const sessionId = sessionStorage.createSession();
+    const sessionId = testSessionStorage.createSession();
     mockedExecuteCommand.mockResolvedValue({
       stdout: 'Test response',
       stderr: 'conversation id: abc-123-def',
     });
 
-    await handler.execute({
+    await codexTool.execute({
       prompt: 'First message',
       sessionId,
     });
@@ -58,62 +50,18 @@ describe('Codex Resume Functionality', () => {
   });
 
   test('should extract and store session ID', async () => {
-    const sessionId = sessionStorage.createSession();
+    const sessionId = testSessionStorage.createSession();
     mockedExecuteCommand.mockResolvedValue({
       stdout: 'Test response',
       stderr: 'conversation id: abc-123-def',
     });
 
-    await handler.execute({
+    await codexTool.execute({
       prompt: 'First message',
       sessionId,
     });
 
-    expect(sessionStorage.getCodexConversationId(sessionId)).toBe(
-      'abc-123-def'
-    );
-  });
-
-  test('should surface threadId in response metadata when present', async () => {
-    mockedExecuteCommand.mockResolvedValue({
-      stdout: 'thread id: th_123',
-      stderr: '',
-    });
-
-    const result = await handler.execute({
-      prompt: 'Thread metadata check',
-    });
-
-    expect(result.content[0]._meta?.threadId).toBe('th_123');
-    expect(result.structuredContent?.threadId).toBe('th_123');
-  });
-
-  test('should surface threadId when stderr has output and stdout contains thread id', async () => {
-    mockedExecuteCommand.mockResolvedValue({
-      stdout: 'thread id: th_stdout_456',
-      stderr: 'warning: noisy stderr output',
-    });
-
-    const result = await handler.execute({
-      prompt: 'Thread metadata mixed output',
-    });
-
-    expect(result.content[0]._meta?.threadId).toBe('th_stdout_456');
-    expect(result.structuredContent?.threadId).toBe('th_stdout_456');
-  });
-
-  test('should surface threadId when stdout has noise and stderr contains thread id', async () => {
-    mockedExecuteCommand.mockResolvedValue({
-      stdout: 'log: stdout noise',
-      stderr: 'thread id: th_stderr_789',
-    });
-
-    const result = await handler.execute({
-      prompt: 'Thread metadata mixed output stderr',
-    });
-
-    expect(result.content[0]._meta?.threadId).toBe('th_stderr_789');
-    expect(result.structuredContent?.threadId).toBe('th_stderr_789');
+    expect(testSessionStorage.getCodexConversationId(sessionId)).toBe('abc-123-def');
   });
 
   test('should pass callback URI via environment when provided', async () => {
@@ -122,7 +70,7 @@ describe('Codex Resume Functionality', () => {
       stderr: '',
     });
 
-    await handler.execute({
+    await codexTool.execute({
       prompt: 'Callback check',
       callbackUri: 'http://localhost:1234/callback',
     });
@@ -136,23 +84,19 @@ describe('Codex Resume Functionality', () => {
   });
 
   test('should use resume for subsequent messages in session', async () => {
-    const sessionId = sessionStorage.createSession();
-    sessionStorage.setCodexConversationId(
-      sessionId,
-      'existing-codex-session-id'
-    );
+    const sessionId = testSessionStorage.createSession();
+    testSessionStorage.setCodexConversationId(sessionId, 'existing-codex-session-id');
 
     mockedExecuteCommand.mockResolvedValue({
       stdout: 'Resumed response',
       stderr: '',
     });
 
-    await handler.execute({
+    await codexTool.execute({
       prompt: 'Continue the task',
       sessionId,
     });
 
-    // Resume mode: all exec options must come BEFORE 'resume' subcommand
     expect(mockedExecuteCommand).toHaveBeenCalledWith('codex', [
       'exec',
       '--skip-git-repo-check',
@@ -165,21 +109,20 @@ describe('Codex Resume Functionality', () => {
   });
 
   test('should reset session ID when session is reset', async () => {
-    const sessionId = sessionStorage.createSession();
-    sessionStorage.setCodexConversationId(sessionId, 'old-session-id');
+    const sessionId = testSessionStorage.createSession();
+    testSessionStorage.setCodexConversationId(sessionId, 'old-session-id');
 
     mockedExecuteCommand.mockResolvedValue({
       stdout: 'Test response',
       stderr: 'conversation id: new-session-id',
     });
 
-    await handler.execute({
+    await codexTool.execute({
       prompt: 'Reset and start new',
       sessionId,
       resetSession: true,
     });
 
-    // Should use exec (not resume) and get new session ID
     expect(mockedExecuteCommand).toHaveBeenCalledWith('codex', [
       'exec',
       '--model',
@@ -187,16 +130,13 @@ describe('Codex Resume Functionality', () => {
       '--skip-git-repo-check',
       'Reset and start new',
     ], undefined, undefined);
-    expect(sessionStorage.getCodexConversationId(sessionId)).toBe(
-      'new-session-id'
-    );
+    expect(testSessionStorage.getCodexConversationId(sessionId)).toBe('new-session-id');
   });
 
   test('should fall back to manual context if no codex session ID', async () => {
-    const sessionId = sessionStorage.createSession();
+    const sessionId = testSessionStorage.createSession();
 
-    // Add some history
-    sessionStorage.addTurn(sessionId, {
+    testSessionStorage.addTurn(sessionId, {
       prompt: 'Previous question',
       response: 'Previous answer',
       timestamp: new Date(),
@@ -207,14 +147,13 @@ describe('Codex Resume Functionality', () => {
       stderr: '',
     });
 
-    await handler.execute({
+    await codexTool.execute({
       prompt: 'Follow up question',
       sessionId,
     });
 
-    // Should build enhanced prompt since no codex session ID
     const call = mockedExecuteCommand.mock.calls[0];
-    const sentPrompt = call?.[1]?.[4]; // After exec, --model, gpt-5.3-codex, --skip-git-repo-check, prompt
+    const sentPrompt = call?.[1]?.[call[1].length - 1];
     expect(sentPrompt).toContain('Context:');
     expect(sentPrompt).toContain('Task: Follow up question');
   });

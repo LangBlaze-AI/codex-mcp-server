@@ -20,19 +20,12 @@ jest.mock('../utils/command.js', () => ({
 }));
 
 import { TOOLS } from '../types.js';
-import { toolDefinitions } from '../tools/definitions.js';
+import { getToolDefinitions, executeTool, toolExists } from '../tools/index.js';
+import { pingTool, helpTool, listSessionsTool, identityTool } from '../tools/simple-tools.js';
 import {
   CallToolResultSchema,
   ListToolsResultSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import {
-  toolHandlers,
-  CodexToolHandler,
-  ReviewToolHandler,
-  PingToolHandler,
-  HelpToolHandler,
-  ListSessionsToolHandler,
-} from '../tools/handlers.js';
 import { InMemorySessionStorage } from '../session/storage.js';
 import { CodexMcpServer } from '../server.js';
 
@@ -46,92 +39,76 @@ describe('Codex MCP Server', () => {
 
   describe('Tool Definitions', () => {
     test('should have all required tools defined', () => {
-      expect(toolDefinitions).toHaveLength(5);
+      const toolDefs = getToolDefinitions();
+      expect(toolDefs).toHaveLength(6); // codex, review, ping, help, listSessions, identity
 
-      const toolNames = toolDefinitions.map((tool) => tool.name);
+      const toolNames = toolDefs.map((tool) => tool.name);
       expect(toolNames).toContain(TOOLS.CODEX);
       expect(toolNames).toContain(TOOLS.REVIEW);
       expect(toolNames).toContain(TOOLS.PING);
       expect(toolNames).toContain(TOOLS.HELP);
       expect(toolNames).toContain(TOOLS.LIST_SESSIONS);
-    });
-
-    test('codex tool should define output schema', () => {
-      const codexTool = toolDefinitions.find(
-        (tool) => tool.name === TOOLS.CODEX
-      );
-      expect(codexTool?.outputSchema).toBeDefined();
-      expect(codexTool?.outputSchema?.type).toBe('object');
+      expect(toolNames).toContain(TOOLS.IDENTITY);
     });
 
     test('codex tool should have required prompt parameter', () => {
-      const codexTool = toolDefinitions.find(
-        (tool) => tool.name === TOOLS.CODEX
-      );
-      expect(codexTool).toBeDefined();
-      expect(codexTool?.inputSchema.required).toContain('prompt');
-      expect(codexTool?.description).toContain('Execute Codex CLI');
+      const toolDefs = getToolDefinitions();
+      const codexToolDef = toolDefs.find((tool) => tool.name === TOOLS.CODEX);
+      expect(codexToolDef).toBeDefined();
+      expect(codexToolDef?.inputSchema.required).toContain('prompt');
+      expect(codexToolDef?.description).toContain('Execute Codex CLI');
     });
 
     test('ping tool should have optional message parameter', () => {
-      const pingTool = toolDefinitions.find((tool) => tool.name === TOOLS.PING);
-      expect(pingTool).toBeDefined();
-      expect(pingTool?.inputSchema.required).toEqual([]);
-      expect(pingTool?.description).toContain('Test MCP server connection');
+      const toolDefs = getToolDefinitions();
+      const pingToolDef = toolDefs.find((tool) => tool.name === TOOLS.PING);
+      expect(pingToolDef).toBeDefined();
+      expect(pingToolDef?.inputSchema.required).toEqual([]);
+      expect(pingToolDef?.description).toContain('Test MCP server connection');
     });
 
     test('help tool should have no required parameters', () => {
-      const helpTool = toolDefinitions.find((tool) => tool.name === TOOLS.HELP);
-      expect(helpTool).toBeDefined();
-      expect(helpTool?.inputSchema.required).toEqual([]);
-      expect(helpTool?.description).toContain('Get Codex CLI help');
+      const toolDefs = getToolDefinitions();
+      const helpToolDef = toolDefs.find((tool) => tool.name === TOOLS.HELP);
+      expect(helpToolDef).toBeDefined();
+      expect(helpToolDef?.inputSchema.required).toEqual([]);
+      expect(helpToolDef?.description).toContain('Get Codex CLI help');
     });
   });
 
-  describe('Tool Handlers', () => {
-    test('should have handlers for all tools', () => {
-      expect(toolHandlers[TOOLS.CODEX]).toBeInstanceOf(CodexToolHandler);
-      expect(toolHandlers[TOOLS.REVIEW]).toBeInstanceOf(ReviewToolHandler);
-      expect(toolHandlers[TOOLS.PING]).toBeInstanceOf(PingToolHandler);
-      expect(toolHandlers[TOOLS.HELP]).toBeInstanceOf(HelpToolHandler);
-      expect(toolHandlers[TOOLS.LIST_SESSIONS]).toBeInstanceOf(
-        ListSessionsToolHandler
-      );
+  describe('Tool Registry', () => {
+    test('should have all tools registered', () => {
+      expect(toolExists(TOOLS.CODEX)).toBe(true);
+      expect(toolExists(TOOLS.REVIEW)).toBe(true);
+      expect(toolExists(TOOLS.PING)).toBe(true);
+      expect(toolExists(TOOLS.HELP)).toBe(true);
+      expect(toolExists(TOOLS.LIST_SESSIONS)).toBe(true);
+      expect(toolExists(TOOLS.IDENTITY)).toBe(true);
     });
 
-    test('ping handler should return message', async () => {
-      const handler = new PingToolHandler();
-      const result = await handler.execute({ message: 'test' });
-
-      expect(result.content).toHaveLength(1);
-      expect(result.content[0].type).toBe('text');
-      expect(result.content[0].text).toBe('test');
+    test('ping tool should return message', async () => {
+      const result = await pingTool.execute({ message: 'test' });
+      expect(typeof result).toBe('string');
+      expect(result).toBe('test');
     });
 
-    test('ping handler should use default message', async () => {
-      const handler = new PingToolHandler();
-      const result = await handler.execute({});
-
-      expect(result.content[0].text).toBe('pong');
+    test('ping tool should use default message', async () => {
+      const result = await pingTool.execute({});
+      expect(result).toBe('pong');
     });
 
-    test('listSessions handler should return session info', async () => {
-      const sessionStorage = new InMemorySessionStorage();
-      const handler = new ListSessionsToolHandler(sessionStorage);
-      const result = await handler.execute({});
-
-      expect(result.content).toHaveLength(1);
-      expect(result.content[0].type).toBe('text');
-      expect(result.content[0].text).toBe('No active sessions');
+    test('listSessions tool should return no active sessions when empty', async () => {
+      const result = await listSessionsTool.execute({});
+      expect(typeof result).toBe('string');
+      expect(result).toBe('No active sessions');
     });
 
     test('review tool should have correct definition', () => {
-      const reviewTool = toolDefinitions.find(
-        (tool) => tool.name === TOOLS.REVIEW
-      );
-      expect(reviewTool).toBeDefined();
-      expect(reviewTool?.inputSchema.required).toEqual([]);
-      expect(reviewTool?.description).toContain('code review');
+      const toolDefs = getToolDefinitions();
+      const reviewToolDef = toolDefs.find((tool) => tool.name === TOOLS.REVIEW);
+      expect(reviewToolDef).toBeDefined();
+      expect(reviewToolDef?.inputSchema.required).toEqual([]);
+      expect(reviewToolDef?.description).toContain('code review');
     });
   });
 
@@ -157,7 +134,7 @@ describe('Codex MCP Server', () => {
 
     test('tool definitions should validate against ListToolsResultSchema', () => {
       const parsed = ListToolsResultSchema.safeParse({
-        tools: toolDefinitions,
+        tools: getToolDefinitions(),
       });
       expect(parsed.success).toBe(true);
     });
